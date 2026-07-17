@@ -64,23 +64,25 @@ process.on("SIGTERM", cleanup)
 process.on("uncaughtException", (err) => {
   console.error(err.message)
   cleanup()
+  process.exit(1)
 })
 
 process.on("unhandledRejection", (err) => {
   console.error(err.message)
   cleanup()
+  process.exit(2)
 })
 
 if (!startedServerSuccessfully) {
   console.error("Failed to start static server")
   cleanup()
-  process.exit(1)
+  process.exit(3)
 }
 
 if (!fs.existsSync("screenshots")) {
   console.error("No screenshots directory found in the current directory")
   cleanup()
-  process.exit(2)
+  process.exit(4)
 }
 
 await exec("rm -rf dist")
