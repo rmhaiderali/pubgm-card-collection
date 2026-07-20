@@ -7,8 +7,7 @@
   },
   "dependencies": {
     "gh-pages": "^6.3.0",
-    "serve-static-files": "^0.1.1",
-    "tree-kill": "^1.2.2"
+    "serve-static-files": "^0.1.1"
   },
   "prettier": {
     "semi": false

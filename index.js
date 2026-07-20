@@ -2,7 +2,6 @@ import fs from "fs"
 import path from "path"
 import { promisify } from "util"
 import child_process from "child_process"
-import kill from "tree-kill"
 
 const overwrite = false
 
@@ -48,7 +47,7 @@ const staticServer = spawn(
 
 function cleanup() {
   if (fs.existsSync(tempWebp)) fs.unlinkSync(tempWebp)
-  kill(staticServer.pid)
+  staticServer.kill("SIGKILL")
 }
 
 const close = new Promise((resolve) => {
