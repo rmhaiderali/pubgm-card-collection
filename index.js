@@ -20,9 +20,10 @@ function execute(cmdObject) {
   return exec(cmdObjectToString(cmdObject))
 }
 
+const ext = ".webp"
 const input = "screenshots"
 const output = "dist"
-const tempWebp = "temp.webp"
+const temp = "temp" + ext
 
 const outputHtml = output + "/index.html"
 await execute(["rm", "-f", outputHtml])
@@ -46,7 +47,7 @@ const staticServer = spawn(
 )
 
 function cleanup() {
-  if (fs.existsSync(tempWebp)) fs.unlinkSync(tempWebp)
+  if (fs.existsSync(temp)) fs.unlinkSync(temp)
   staticServer.kill("SIGKILL")
 }
 
@@ -123,7 +124,7 @@ for (const version of readDir(input)) {
 
     for (const card of readDir(input2)) {
       const input3 = input2 + "/" + card.name
-      const output3 = output2 + "/" + path.parse(card.name).name + ".webp"
+      const output3 = output2 + "/" + path.parse(card.name).name + ext
 
       if (!overwrite && fs.existsSync(output3)) {
         console.log("already exist: " + output3)
@@ -140,12 +141,12 @@ for (const version of readDir(input)) {
         ["-lossless", "0"],
         ["-compression_level", "6"],
         // ["-q:v", "100"],
-        [tempWebp],
+        [temp],
       ]
 
       await execute(cmdObject)
 
-      await execute(["mv", tempWebp, output3])
+      await execute(["mv", temp, output3])
 
       console.log("done: " + output3)
     }
