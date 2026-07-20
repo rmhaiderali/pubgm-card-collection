@@ -4,6 +4,8 @@ import { promisify } from "util"
 import child_process from "child_process"
 import kill from "tree-kill"
 
+const overwrite = false
+
 function cmdObjectToString(kvEntries) {
   return kvEntries
     .flat()
@@ -15,44 +17,75 @@ const spawn = child_process.spawn
 const exec = promisify(child_process.exec)
 const readDir = (path) => fs.readdirSync(path, { withFileTypes: true })
 
+function execute(cmdObject) {
+  return exec(cmdObjectToString(cmdObject))
+}
+
+const input = "screenshots"
+const output = "dist"
+const tempWebp = "temp.webp"
+
+const outputHtml = output + "/index.html"
+await execute(["rm", "-f", outputHtml])
+
+if (!fs.existsSync(input)) {
+  console.error("No " + input + " directory found in the current directory")
+  process.exit(1)
+}
+
+if (overwrite) await execute(["rm", "-rf", output])
+if (!fs.existsSync(output)) fs.mkdirSync(output)
+
+const PORT = 3000
+const BASE = "/pubgm-card-collection"
+const staticServerUrl = "http://localhost:" + PORT + BASE
+
 const staticServer = spawn(
   "node",
-  ["node_modules/serve-static-files", "dist"],
-  { env: { ...process.env, PORT: 3000, BASE: "/pubgm-card-collection" } },
+  ["node_modules/serve-static-files", output],
+  { env: { ...process.env, PORT, BASE } },
 )
 
-const staticServerUrl = "http://localhost:3000/pubgm-card-collection"
+function cleanup() {
+  if (fs.existsSync(tempWebp)) fs.unlinkSync(tempWebp)
+  kill(staticServer.pid)
+}
 
-staticServer.on("close", () => {
-  console.log("static server stopped")
+const close = new Promise((resolve) => {
+  staticServer.on("close", () => {
+    console.log("static server stopped")
+    resolve(false)
+  })
 })
 
 staticServer.stderr.on("data", (data) => {
   console.log(data.toString())
 })
 
-const chunk1 = await new Promise((resolve) => {
+const firstDataPromise = new Promise((resolve) => {
   staticServer.stdout.once("data", (data) => {
-    resolve(data)
+    resolve(data.toString())
   })
 })
 
-const chunk2 = await new Promise((resolve) => {
+const firstData = await Promise.race([firstDataPromise, close])
+if (!firstData) process.exit(2)
+console.log(firstData)
+
+const secondDataPromise = new Promise((resolve) => {
   staticServer.stdout.once("data", (data) => {
-    resolve(data)
+    resolve(data.toString())
   })
 })
 
-const chunk1String = chunk1.toString()
-const chunk2String = chunk2.toString()
+const secondData = await Promise.race([secondDataPromise, close])
+if (!secondData) process.exit(3)
+console.log(secondData)
 
-console.log(chunk1String)
-console.log(chunk2String)
-
-const startedServerSuccessfully = chunk2String.includes("http://localhost:3000")
-
-function cleanup() {
-  kill(staticServer.pid)
+if (!secondData.includes(staticServerUrl)) {
+  console.error("Failed to start static server")
+  cleanup()
+  process.exit(4)
 }
 
 process.on("exit", cleanup)
@@ -64,50 +97,43 @@ process.on("SIGTERM", cleanup)
 process.on("uncaughtException", (err) => {
   console.error(err.message)
   cleanup()
-  process.exit(1)
+  process.exit(5)
 })
 
 process.on("unhandledRejection", (err) => {
   console.error(err.message)
   cleanup()
-  process.exit(2)
+  process.exit(6)
 })
-
-if (!startedServerSuccessfully) {
-  console.error("Failed to start static server")
-  cleanup()
-  process.exit(3)
-}
-
-if (!fs.existsSync("screenshots")) {
-  console.error("No screenshots directory found in the current directory")
-  cleanup()
-  process.exit(4)
-}
-
-await exec("rm -rf dist")
-await exec("mkdir dist")
-
-const input = "screenshots"
-const output = "dist"
 
 for (const version of readDir(input)) {
   const input1 = input + "/" + version.name
   const output1 = output + "/" + version.name
-  fs.mkdirSync(output1)
+  if (!fs.existsSync(output1)) fs.mkdirSync(output1)
+
+  const output1Html = output1 + "/index.html"
+  await execute(["rm", "-f", output1Html])
 
   for (const collection of readDir(input1)) {
     const input2 = input1 + "/" + collection.name
     const output2 = output1 + "/" + collection.name
-    fs.mkdirSync(output2)
+    if (!fs.existsSync(output2)) fs.mkdirSync(output2)
+
+    const output2Html = output2 + "/index.html"
+    await execute(["rm", "-f", output2Html])
 
     for (const card of readDir(input2)) {
       const input3 = input2 + "/" + card.name
       const output3 = output2 + "/" + path.parse(card.name).name + ".webp"
 
+      if (!overwrite && fs.existsSync(output3)) {
+        console.log("already exist: " + output3)
+        continue
+      }
+
       // prettier-ignore
       const cmdObject = [
-        ["ffmpeg"],
+        ["ffmpeg", "-y"],
         ["-i", input3],
         ["-i", "mask.svg"],
         ["-filter_complex", "[1:v]alphaextract[mask];[0:v][mask]alphamerge,crop=668:978:884:52"],
@@ -115,40 +141,30 @@ for (const version of readDir(input)) {
         ["-lossless", "0"],
         ["-compression_level", "6"],
         // ["-q:v", "100"],
-        [output3],
+        [tempWebp],
       ]
 
-      const cmd = cmdObjectToString(cmdObject)
+      await execute(cmdObject)
 
-      await exec(cmd)
+      await execute(["mv", tempWebp, output3])
 
       console.log("done: " + output3)
     }
 
-    await exec(
-      "curl " +
-        staticServerUrl +
-        "/" +
-        version.name +
-        "/" +
-        collection.name +
-        "/ -o " +
-        output2 +
-        "/index.html",
-    )
+    await execute([
+      ["curl"],
+      [staticServerUrl + "/" + version.name + "/" + collection.name + "/"],
+      ["-o", output2Html],
+    ])
   }
 
-  await exec(
-    "curl " +
-      staticServerUrl +
-      "/" +
-      version.name +
-      "/ -o " +
-      output1 +
-      "/index.html",
-  )
+  await execute([
+    ["curl"],
+    [staticServerUrl + "/" + version.name + "/"],
+    ["-o", output1Html],
+  ])
 }
 
-await exec("curl " + staticServerUrl + "/ -o " + output + "/index.html")
+await execute([["curl"], [staticServerUrl + "/"], ["-o", outputHtml]])
 
 cleanup()
