@@ -2,6 +2,7 @@ import fs from "fs"
 import path from "path"
 import { promisify } from "util"
 import child_process from "child_process"
+import { onExit } from "signal-exit"
 
 const overwrite = false
 
@@ -48,14 +49,14 @@ const staticServer = spawn(
 
 function cleanup() {
   if (fs.existsSync(temp)) fs.unlinkSync(temp)
-  staticServer.kill("SIGKILL")
+  console.log("Stopping static server")
+  staticServer.kill("SIGTERM")
 }
 
+onExit(cleanup)
+
 const close = new Promise((resolve) => {
-  staticServer.on("close", () => {
-    console.log("static server stopped")
-    resolve(false)
-  })
+  staticServer.on("close", () => resolve(false))
 })
 
 staticServer.stderr.on("data", (data) => {
@@ -84,25 +85,16 @@ console.log(secondData)
 
 if (!secondData.includes(staticServerUrl)) {
   console.error("Failed to start static server")
-  cleanup()
   process.exit(4)
 }
 
-process.on("exit", cleanup)
-
-process.on("SIGINT", cleanup)
-
-process.on("SIGTERM", cleanup)
-
 process.on("uncaughtException", (err) => {
   console.error(err.message)
-  cleanup()
   process.exit(5)
 })
 
 process.on("unhandledRejection", (err) => {
   console.error(err.message)
-  cleanup()
   process.exit(6)
 })
 
@@ -167,4 +159,4 @@ for (const version of readDir(input)) {
 
 await execute([["curl"], [staticServerUrl + "/"], ["-o", outputHtml]])
 
-cleanup()
+process.exit(0)
