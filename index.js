@@ -5,6 +5,8 @@ import child_process from "child_process"
 import { onExit } from "signal-exit"
 
 const overwrite = false
+const exifLog = false
+const exifFields = ["Software", "Date/Time Original"]
 
 function cmdObjectToString(kvEntries) {
   return kvEntries
@@ -118,8 +120,20 @@ for (const version of readDir(input)) {
       const input3 = input2 + "/" + card.name
       const output3 = output2 + "/" + path.parse(card.name).name + ext
 
+      if (exifLog) {
+        const regex = new RegExp(exifFields.map(RegExp.escape).join("|"))
+
+        const exiftool = await execute(["exiftool", input3])
+
+        const lines = exiftool.stdout
+          .split("\n")
+          .filter((line) => line.match(regex))
+
+        for (const line of lines) console.log(line.replace(/\s+/g, " "))
+      }
+
       if (!overwrite && fs.existsSync(output3)) {
-        console.log("already exist: " + output3)
+        console.log("already exist: " + output3 + "\n")
         continue
       }
 
@@ -140,7 +154,7 @@ for (const version of readDir(input)) {
 
       await execute(["mv", temp, output3])
 
-      console.log("done: " + output3)
+      console.log("done: " + output3 + "\n")
     }
 
     await execute([
