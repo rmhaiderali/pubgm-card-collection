@@ -142,7 +142,7 @@ for (const version of readDir(input)) {
         ["ffmpeg", "-y"],
         ["-i", input3],
         ["-i", "mask.svg"],
-        ["-filter_complex", "[1:v]alphaextract[mask];[0:v][mask]alphamerge,crop=668:978:884:52"],
+        ["-filter_complex", "[1:v]alphaextract[mask];[0:v][mask]alphamerge,crop=664:976:886:52"],
         ["-c:v", "libwebp"],
         ["-lossless", "0"],
         ["-compression_level", "6"],

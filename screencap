@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+
+FILE="${1:-image.png}"
+
+if [ -f "$FILE" ]; then
+    read -p "File $FILE already exists. Overwrite? (y/N): " RESPONSE
+
+    if [ "$RESPONSE" != "y" ] && [ "$RESPONSE" != "Y" ]; then
+        echo "Aborting"
+        exit 1
+    fi
+fi
+
+export MSYS_NO_PATHCONV=1
+adb shell screencap /storage/emulated/0/image.png
+adb pull /storage/emulated/0/image.png "$FILE"
