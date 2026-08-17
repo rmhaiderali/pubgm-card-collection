@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+
+dir="$1"
+ext=".webp"
+# ext=".png"
+
+if [ ! -d "$dir" ]; then
+    echo "arg1 dir \"$dir\" does not exist"
+    exit 1
+fi
+
+files="$(find "$dir" -type f \( -name "*.jpg" -o -name "*.png" -o -name "*.webp" \))"
+links="$(find "$dir" -type l \( -name "*.jpg" -o -name "*.png" -o -name "*.webp" \))"
+
+file_count=$(echo "$files" | grep -c .)
+link_count=$(echo "$links" | grep -c .)
+
+echo "=> $file_count files found"
+[ -n "$2" ] && [ -n "$files" ] && echo "$files"
+[ -n "$2" ] && echo
+
+echo "=> $link_count links found"
+[ -n "$2" ] && [ -n "$links" ] && echo "$links"
+[ -n "$2" ] && echo
+
+echo "=> $(expr $file_count + $link_count) files and links found"

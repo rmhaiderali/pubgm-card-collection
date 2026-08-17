@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+
+# imagemagick
+compare -metric NCC "$1" "$2" null: 2>&1
+echo

@@ -2,6 +2,7 @@
   "type": "module",
   "scripts": {
     "build": "node index.js",
+    "preview": "HOST=:: PORT=3000 BASE=/pubgm-card-collection serve-static-files dist",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
   },

@@ -23,21 +23,50 @@ function execute(cmdObject) {
   return exec(cmdObjectToString(cmdObject))
 }
 
-const ext = ".webp"
-const input = "screenshots"
-const output = "dist"
-const temp = "temp" + ext
+const dir = { input: "screenshots", mask: "masks", output: "dist" }
+const ext = { input: ".png", mask: ".svg", output: ".webp" }
+const temp = "temp" + ext.output
 
-const outputHtml = output + "/index.html"
+const defaultMask = "default"
+
+const maskMap = {
+  "global/4.5/playful-battleground-3.0/01": "karamabit_blazing_sun",
+  "in/4.5/playful-battleground-3.0/01": "karamabit_blazing_sun",
+}
+
+function getMaskByCard(cardPath) {
+  const { dir, name } = path.parse(cardPath)
+  const uniquePart = dir + "/" + name
+  return maskMap[uniquePart] || defaultMask
+}
+
+const defaultCrop = "664:976:886:52"
+
+const cropMap = {
+  "global/4.5/playful-battleground-3.0/01": "675:977:882:51",
+  "in/4.5/playful-battleground-3.0/01": "675:977:882:51",
+}
+
+function getCropByCard(cardPath) {
+  const { dir, name } = path.parse(cardPath)
+  const uniquePart = dir + "/" + name
+  return cropMap[uniquePart] || defaultCrop
+}
+
+function pathWithoutExt(filePath) {
+  return filePath.substring(0, filePath.lastIndexOf("."))
+}
+
+const outputHtml = dir.output + "/index.html"
 await execute(["rm", "-f", outputHtml])
 
-if (!fs.existsSync(input)) {
-  console.error("No " + input + " directory found in the current directory")
+if (!fs.existsSync(dir.input)) {
+  console.error("No " + dir.input + " directory found in the current directory")
   process.exit(1)
 }
 
-if (overwrite) await execute(["rm", "-rf", output])
-if (!fs.existsSync(output)) fs.mkdirSync(output)
+if (overwrite) await execute(["rm", "-rf", dir.output])
+if (!fs.existsSync(dir.output)) fs.mkdirSync(dir.output)
 
 const PORT = 3000
 const BASE = "/pubgm-card-collection"
@@ -45,7 +74,7 @@ const staticServerUrl = "http://localhost:" + PORT + BASE
 
 const staticServer = spawn(
   "node",
-  ["node_modules/serve-static-files", output],
+  ["node_modules/serve-static-files", dir.output],
   { env: { ...process.env, PORT, BASE } },
 )
 
@@ -100,73 +129,108 @@ process.on("unhandledRejection", (err) => {
   process.exit(6)
 })
 
-for (const version of readDir(input)) {
-  const input1 = input + "/" + version.name
-  const output1 = output + "/" + version.name
+for (const region of readDir(dir.input)) {
+  const link1 = region.name
+  const input1 = dir.input + "/" + link1
+  const output1 = dir.output + "/" + link1
   if (!fs.existsSync(output1)) fs.mkdirSync(output1)
 
   const output1Html = output1 + "/index.html"
   await execute(["rm", "-f", output1Html])
 
-  for (const collection of readDir(input1)) {
-    const input2 = input1 + "/" + collection.name
-    const output2 = output1 + "/" + collection.name
+  for (const version of readDir(input1)) {
+    const link2 = link1 + "/" + version.name
+    const input2 = dir.input + "/" + link2
+    const output2 = dir.output + "/" + link2
     if (!fs.existsSync(output2)) fs.mkdirSync(output2)
 
     const output2Html = output2 + "/index.html"
     await execute(["rm", "-f", output2Html])
 
-    for (const card of readDir(input2)) {
-      const input3 = input2 + "/" + card.name
-      const output3 = output2 + "/" + path.parse(card.name).name + ext
+    for (const collection of readDir(input2)) {
+      const link3 = link2 + "/" + collection.name
+      const input3 = dir.input + "/" + link3
+      const output3 = dir.output + "/" + link3
+      if (!fs.existsSync(output3)) fs.mkdirSync(output3)
 
-      if (exifLog) {
-        const regex = new RegExp(exifFields.map(RegExp.escape).join("|"))
+      const output3Html = output3 + "/index.html"
+      await execute(["rm", "-f", output3Html])
 
-        const exiftool = await execute(["exiftool", input3])
+      for (const card of readDir(input3)) {
+        const link4 = link3 + "/" + card.name
+        const input4 = dir.input + "/" + link4
+        const output4 = dir.output + "/" + pathWithoutExt(link4) + ext.output
 
-        const lines = exiftool.stdout
-          .split("\n")
-          .filter((line) => line.match(regex))
+        if (exifLog) {
+          const regex = new RegExp(exifFields.map(RegExp.escape).join("|"))
 
-        for (const line of lines) console.log(line.replace(/\s+/g, " "))
+          const exiftool = await execute(["exiftool", input4])
+
+          const lines = exiftool.stdout
+            .split("\n")
+            .filter((line) => line.match(regex))
+
+          for (const line of lines) console.log(line.replace(/\s+/g, " "))
+        }
+
+        // Not using fs.existsSync() because it will resolve
+        // symlinks and we want to check if symlink itself exists
+        // For regular files it behaves the same as fs.existsSync()
+        let output4Exist = false
+
+        try {
+          output4Exist = !!fs.lstatSync(output4)
+        } catch (e) {}
+
+        if (!overwrite && output4Exist) {
+          console.log("already exist: " + output4 + "\n")
+          continue
+        }
+
+        if (fs.lstatSync(input4).isSymbolicLink()) {
+          const target = pathWithoutExt(fs.readlinkSync(input4)) + ext.output
+          fs.symlinkSync(target, output4)
+          console.log("symlinked: " + output4 + "\n")
+          continue
+        }
+
+        // prettier-ignore
+        const cmdObject = [
+          ["ffmpeg", "-y"],
+          ["-i", input4],
+          ["-i", dir.mask + "/" + getMaskByCard(link4) + ext.mask],
+          ["-filter_complex", "[1:v]alphaextract[mask];[0:v][mask]alphamerge,crop=" + getCropByCard(link4)],
+          ["-c:v", "libwebp"],
+          ["-lossless", "0"],
+          ["-compression_level", "6"],
+          // ["-q:v", "100"],
+          [temp],
+        ]
+
+        await execute(cmdObject)
+
+        await execute(["mv", temp, output4])
+
+        console.log("done: " + output4 + "\n")
       }
 
-      if (!overwrite && fs.existsSync(output3)) {
-        console.log("already exist: " + output3 + "\n")
-        continue
-      }
-
-      // prettier-ignore
-      const cmdObject = [
-        ["ffmpeg", "-y"],
-        ["-i", input3],
-        ["-i", "mask.svg"],
-        ["-filter_complex", "[1:v]alphaextract[mask];[0:v][mask]alphamerge,crop=664:976:886:52"],
-        ["-c:v", "libwebp"],
-        ["-lossless", "0"],
-        ["-compression_level", "6"],
-        // ["-q:v", "100"],
-        [temp],
-      ]
-
-      await execute(cmdObject)
-
-      await execute(["mv", temp, output3])
-
-      console.log("done: " + output3 + "\n")
+      await execute([
+        ["curl"],
+        [staticServerUrl + "/" + link3 + "/"],
+        ["-o", output3Html],
+      ])
     }
 
     await execute([
       ["curl"],
-      [staticServerUrl + "/" + version.name + "/" + collection.name + "/"],
+      [staticServerUrl + "/" + link2 + "/"],
       ["-o", output2Html],
     ])
   }
 
   await execute([
     ["curl"],
-    [staticServerUrl + "/" + version.name + "/"],
+    [staticServerUrl + "/" + link1 + "/"],
     ["-o", output1Html],
   ])
 }

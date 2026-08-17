@@ -1,0 +1,27 @@
+#!/usr/bin/env sh
+
+# example usage: ./loopdiff dist/global/4.5/steal-a-brainrot dist/in/4.5/steal-a-brainrot
+
+# loop_count=$4
+loop_count=50
+
+d1="$1"
+d2="$2"
+
+if [ ! -d "$d1" ]; then
+    echo "arg1 dir \"$d1\" does not exist"
+    exit 1
+fi
+
+if [ ! -d "$d2" ]; then
+    echo "arg2 dir \"$d2\" does not exist"
+    exit 2
+fi
+
+for i in $(seq -f "%02g" 1 "$loop_count"); do
+    f1="$d1/$i.webp"
+    f2="$d2/$i.webp"
+    if [ -f "$f1" ] && [ -f "$f2" ]; then
+        echo "$i.webp diff: $(./diff "$f1" "$f2")"
+    fi
+done
