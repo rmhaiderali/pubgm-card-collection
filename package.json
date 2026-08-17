@@ -7,7 +7,7 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
-    "gh-pages": "^6.3.0",
+    "gh-pages": "github:tschaub/gh-pages",
     "serve-static-files": "^0.1.2",
     "signal-exit": "^4.1.0"
   },
